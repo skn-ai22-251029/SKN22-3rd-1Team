@@ -1,80 +1,50 @@
-from langchain_core.prompts import (
-    ChatPromptTemplate,
-    FewShotChatMessagePromptTemplate,
+from langchain_core.prompts import ChatPromptTemplate
+
+# ── 1단계: 질문 분류 프롬프트 (gpt-4.1-mini) ─────────────────────────
+CLASSIFIER_SYSTEM = """\
+당신은 한국 의약품 질문 분류기입니다.
+사용자의 질문을 분석하여, 검색해야 할 컬럼과 검색 키워드를 JSON으로 반환하세요.
+
+분류 기준:
+- "product_name": 특정 제품명(약 이름)으로 검색해야 하는 경우
+  예) "타이레놀의 효능은?", "게보린 부작용", "판콜에스 복용법"
+- "ingredient": 성분명으로 검색해야 하는 경우
+  예) "아세트아미노펜이 들어간 약", "이부프로펜 포함 의약품"
+- "efficacy": 효능·증상으로 검색해야 하는 경우
+  예) "두통에 좋은 약", "소화불량에 효과있는 약"
+
+반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요.
+{{"category": "product_name 또는 ingredient 또는 efficacy", "keyword": "검색할 핵심 단어"}}\
+"""
+
+CLASSIFIER_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ("system", CLASSIFIER_SYSTEM),
+        ("human", "{question}"),
+    ]
 )
 
-SYSTEM_MESSAGE = """당신은 한국 의약품 정보 전문 AI 어시스턴트입니다.
-제공된 의약품 정보 데이터베이스를 기반으로 사용자의 질문에 정확하고 친절하게 답변합니다.
+# ── 2단계: 답변 생성 프롬프트 (gpt-4.1) ──────────────────────────────
+ANSWER_SYSTEM = """\
+당신은 한국 의약품 정보 전문 AI 어시스턴트입니다.
+식품의약품안전처의 e약은요, 의약품 허가정보 데이터를 기반으로
+사용자의 질문에 정확하고 친절하게 답변합니다.
 
 반드시 지켜야 할 규칙:
-1. 제공된 컨텍스트 정보만을 기반으로 답변하세요.
-2. 컨텍스트에 없는 정보는 "해당 정보를 찾을 수 없습니다"라고 답변하세요.
+1. 제공된 검색 결과만을 기반으로 답변하세요.
+2. 검색 결과가 없으면 "해당 정보를 찾을 수 없습니다"라고 답변하세요.
 3. 의학적 판단이나 처방 권유는 하지 마세요. 반드시 의사 또는 약사와 상담을 권유하세요.
 4. 답변은 이해하기 쉬운 한국어로 작성하세요.
 5. 약의 이름, 효능, 용법, 주의사항 등을 구조적으로 정리하여 답변하세요."""
 
-FEW_SHOT_EXAMPLES = [
-    {
-        "question": "타이레놀의 효능은 무엇인가요?",
-        "context": (
-            "제품명: 타이레놀정500밀리그람(아세트아미노펜)\n"
-            "업체명: 한국존슨앤드존슨판매(유)\n\n"
-            "[효능]\n"
-            "이 약은 감기로 인한 발열 및 동통(통증), 두통, 신경통, 근육통, "
-            "월경통, 염좌통(삔 통증), 치통, 관절통, 류마티스성 동통(통증)에 사용합니다."
-        ),
-        "answer": (
-            "**타이레놀정500밀리그람(아세트아미노펜)의 효능**\n\n"
-            "제조사: 한국존슨앤드존슨판매(유)\n\n"
-            "이 약은 다음과 같은 증상에 사용됩니다:\n"
-            "- 감기로 인한 발열 및 통증\n"
-            "- 두통, 신경통, 근육통\n"
-            "- 월경통, 염좌통(삔 통증)\n"
-            "- 치통, 관절통\n"
-            "- 류마티스성 통증\n\n"
-            "※ 정확한 복용법과 주의사항은 의사 또는 약사와 상담하시기 바랍니다."
-        ),
-    },
-    {
-        "question": "아스피린과 함께 먹으면 안 되는 약은?",
-        "context": (
-            "제품명: 한미아스피린장용정100밀리그램\n"
-            "업체명: 한미약품(주)\n\n"
-            "[상호작용]\n"
-            "다른 비스테로이드성 소염진통제 및 살리실산 제제, "
-            "일주일 동안 메토트렉세이트 15밀리그람(15mg/주) 이상의 용량은 "
-            "이 약과 병용 투여 시 출혈이 증가되거나 신기능이 감소될 수 있으므로 "
-            "함께 사용하지 않습니다."
-        ),
-        "answer": (
-            "**한미아스피린장용정100밀리그램 - 약물 상호작용 정보**\n\n"
-            "제조사: 한미약품(주)\n\n"
-            "아스피린과 함께 사용에 주의가 필요한 약물:\n\n"
-            "**함께 사용하지 않는 약물:**\n"
-            "- 다른 비스테로이드성 소염진통제(NSAIDs) 및 살리실산 제제\n"
-            "- 메토트렉세이트 15mg/주 이상의 용량\n\n"
-            "출혈 증가 또는 신기능 감소의 위험이 있습니다.\n\n"
-            "※ 반드시 의사 또는 약사와 상의하십시오."
-        ),
-    },
-]
-
-example_prompt = ChatPromptTemplate.from_messages(
+ANSWER_PROMPT = ChatPromptTemplate.from_messages(
     [
-        ("human", "질문: {question}\n\n참고 정보:\n{context}"),
-        ("ai", "{answer}"),
-    ]
-)
-
-few_shot_prompt = FewShotChatMessagePromptTemplate(
-    example_prompt=example_prompt,
-    examples=FEW_SHOT_EXAMPLES,
-)
-
-RAG_PROMPT = ChatPromptTemplate.from_messages(
-    [
-        ("system", SYSTEM_MESSAGE),
-        few_shot_prompt,
-        ("human", "질문: {question}\n\n참고 정보:\n{context}"),
+        ("system", ANSWER_SYSTEM),
+        (
+            "human",
+            "질문: {question}\n\n"
+            "검색 방식: {category} 컬럼에서 \"{keyword}\" 검색\n\n"
+            "검색 결과:\n{context}",
+        ),
     ]
 )
