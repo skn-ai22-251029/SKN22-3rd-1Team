@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_mic_recorder import speech_to_text
 
 from src.chain.rag_chain import build_rag_chain_with_sources, prepare_context, stream_answer
 from src.config import CLASSIFIER_MODEL, LLM_MODEL
@@ -59,8 +60,22 @@ for message in st.session_state.messages:
                         f"품목코드: {src['item_seq']}"
                     )
 
-# 채팅 입력
-if user_input := st.chat_input("의약품에 대해 궁금한 점을 질문해주세요..."):
+# 음성 입력 + 채팅 입력
+with st.container():
+    col_mic, _ = st.columns([1, 4])
+    with col_mic:
+        st.caption("🎤 음성으로 질문하기")
+        voice_text = speech_to_text(
+            language="ko",
+            start_prompt="🎤 녹음",
+            stop_prompt="⏹ 종료",
+            just_once=True,
+            use_container_width=True,
+            key="voice_stt",
+        )
+user_input = voice_text or st.chat_input("의약품에 대해 궁금한 점을 질문해주세요...")
+
+if user_input:
     # 사용자 메시지 표시
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):

@@ -17,6 +17,7 @@ supabase>=2.0.0
 
 # --- Web Framework ---
 streamlit>=1.40.0
+streamlit-mic-recorder
 
 # --- Utilities ---
 python-dotenv>=1.0.0
